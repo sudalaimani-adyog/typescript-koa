@@ -1,97 +1,136 @@
 import { Context } from "koa";
 import { errorResponse, successResponse } from "../utils/response";
-import { IStudent, StudentModel } from "../models/Students_mongoDB";
-import { AddressModel, IAddress } from "../models/Address_mongoDB";
-import { IAttendance } from "../models/Attendance_mongoDB";
-
-// let nextId = students.length + 1 || 1;
-
-type ResultType = IStudent & { address: IAddress | null, attendance: IAttendance[] | null };
-
-type CreateType = IStudent & { address: IAddress | null };
-
-type UpdateType = IStudent & Partial<{ address: IAddress | null }>;
-
+import { StudentModel, AddressModel } from "../models";
+import {
+    StudentWithAddress,
+    StudentsResponse,
+    CreateStudentRequest,
+    UpdateStudentRequest,
+    StudentResponse
+} from "../types/interface";
 
 // GET all students
-export const getStudents = async (ctx: Context) => {
-    let result = await StudentModel.find().populate('address');
-    return successResponse(ctx, 200, "Students retrieved successfully", result);
+export const getStudents = async (ctx: Context): Promise<void> => {
+    try {
+        const result: StudentsResponse = await StudentModel.find().populate('address');
+        return successResponse(ctx, 200, "Students retrieved successfully", result);
+    } catch (error) {
+        return errorResponse(ctx, 500, "Failed to retrieve students", error);
+    }
 };
 
 // GET single student
-export const getStudentById = async (ctx: Context) => {
-    const id = String(ctx.params.id);
-    const result = await StudentModel.findById({ _id: id }).populate('address');
-    if (!result) {
-        return errorResponse(ctx, 404, "Student not found");
-    }
+export const getStudentById = async (ctx: Context): Promise<void> => {
+    try {
+        const id = String(ctx.params.id);
+        const result: StudentWithAddress | null = await StudentModel.findById(id).populate('address');
 
-    return successResponse(ctx, 200, "Students retrieved successfully", result);
+        if (!result) {
+            return errorResponse(ctx, 404, "Student not found");
+        }
+
+        return successResponse(ctx, 200, "Student retrieved successfully", result);
+    } catch (error) {
+        return errorResponse(ctx, 500, "Failed to retrieve student", error);
+    }
 };
 
 // POST create student
-export const createStudent = async (ctx: Context) => {
-    const { name, age, grade, email, department, address } = ctx.request.body as CreateType;
+export const createStudent = async (ctx: Context): Promise<void> => {
+    try {
+        const { name, age, grade, email, department, address } = ctx.request.body as CreateStudentRequest;
 
-    if (!name || !age || !grade || !email || !email || !department) {
-        return errorResponse(ctx, 400, "Name, age, grade, email and department are required");
-    }
+        if (!name || !age || !grade || !email || !department) {
+            return errorResponse(ctx, 400, "Name, age, grade, email and department are required");
+        }
 
-    let student = await StudentModel.create({ name, age, grade, email, department });
-
-    if (address) {
-        await AddressModel.create({
-            studentId: student._id,  // link student
-            street: address.street,
-            city: address.city,
-            state: address.state,
-            zip: address.zip,
-            country: address.country
+        const student: StudentResponse = await StudentModel.create({
+            name,
+            age,
+            grade,
+            email,
+            department
         });
+
+        let createdAddress = null;
+        if (address) {
+            createdAddress = await AddressModel.create({
+                studentId: student._id,
+                street: address.street,
+                city: address.city,
+                state: address.state,
+                zip: address.zip,
+                country: address.country
+            });
+        }
+
+        const responseData = {
+            ...student.toJSON(),
+            address: createdAddress
+        };
+
+        return successResponse(ctx, 201, "Student created successfully", responseData);
+    } catch (error) {
+        return errorResponse(ctx, 500, "Failed to create student", error);
     }
-    return successResponse(ctx, 201, "Student created successfully", { ...student, address: address || null });
 };
 
 // PUT update student
-export const updateStudent = async (ctx: Context) => {
-    const id = String(ctx.params.id);
-    const { name, age, grade, email, department, address } = ctx.request.body as UpdateType;
+export const updateStudent = async (ctx: Context): Promise<void> => {
+    try {
+        const id = String(ctx.params.id);
+        const { name, age, grade, email, department, address } = ctx.request.body as UpdateStudentRequest;
 
-    const student = await StudentModel.findById({ _id: id });
-    if (!student) {
-        return errorResponse(ctx, 404, "Student not found");
+        const student = await StudentModel.findById(id);
+        if (!student) {
+            return errorResponse(ctx, 404, "Student not found");
+        }
+
+        if (name) student.name = name;
+        if (age) student.age = age;
+        if (grade) student.grade = grade;
+        if (email) student.email = email;
+        if (department) student.department = department;
+
+        await student.save();
+
+        let updatedAddress = null;
+        if (address) {
+            updatedAddress = await AddressModel.findOneAndUpdate(
+                { studentId: student._id },
+                {
+                    street: address.street,
+                    city: address.city,
+                    state: address.state,
+                    zip: address.zip,
+                    country: address.country
+                },
+                { new: true, upsert: true }
+            );
+        }
+
+        const updatedStudent = await StudentModel.findById(id).populate('address');
+        return successResponse(ctx, 200, "Student updated successfully", updatedStudent);
+    } catch (error) {
+        return errorResponse(ctx, 500, "Failed to update student", error);
     }
-
-    if (name) student.name = name;
-    if (age) student.age = age;
-    if (grade) student.grade = grade;
-    if (email) student.email = email;
-    if (department) student.department = department;
-
-    await student.save();
-
-    if (address) {
-        await AddressModel.create({
-            studentId: student._id,  // link student
-            street: address.street,
-            city: address.city,
-            state: address.state,
-            zip: address.zip,
-            country: address.country
-        });
-    }
-    return successResponse(ctx, 200, "Student updated successfully", {});
 };
 
 // DELETE student
-export const deleteStudent = async (ctx: Context) => {
-    const id = String(ctx.params.id);
+export const deleteStudent = async (ctx: Context): Promise<void> => {
+    try {
+        const id = String(ctx.params.id);
 
-    const result = await StudentModel.findByIdAndDelete({ _id: id });
-    if (!result) {
-        return errorResponse(ctx, 404, "Student not found");
+        const result = await StudentModel.findByIdAndDelete(id);
+        if (!result) {
+            return errorResponse(ctx, 404, "Student not found");
+        }
+
+        // Also delete related address
+        await AddressModel.deleteMany({ studentId: id });
+
+        return successResponse(ctx, 200, "Student deleted successfully", { id });
+    } catch (error) {
+        return errorResponse(ctx, 500, "Failed to delete student", error);
     }
-
-    return successResponse(ctx, 204, "Student deleted successfully", "");
 };
