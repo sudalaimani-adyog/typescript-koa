@@ -33,6 +33,27 @@ export type CreateAttendanceRequest = {
 
 export type UpdateAttendanceRequest = Omit<CreateAttendanceRequest, 'studentId'>;
 
+// Search filter types
+export type StudentSearchFilters = {
+    name?: string;
+    email?: string;
+    department?: string;
+    grade?: string;
+    minAge?: number;
+    maxAge?: number;
+    city?: string;
+    state?: string;
+    country?: string;
+    attendanceStatus?: string;
+    attendanceDate?: string;
+    attendanceDateFrom?: string;
+    attendanceDateTo?: string;
+    page?: number;
+    limit?: number;
+    sortBy?: 'name' | 'age' | 'grade' | 'department' | 'email' | 'createdAt';
+    sortOrder?: 'asc' | 'desc';
+};
+
 // Response types
 export type ApiResponse<T = any> = {
     statusCode: number;
