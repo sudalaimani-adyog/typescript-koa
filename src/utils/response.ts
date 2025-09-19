@@ -1,11 +1,11 @@
 import { Context } from "koa";
 
-export const successResponse = (
+export const successResponse = <T = any>(
     ctx: Context,
     statusCode: number,
     message: string,
-    data: unknown = null
-) => {
+    data: T | null = null
+): void => {
     ctx.status = statusCode;
     ctx.body = {
         statusCode,
@@ -19,7 +19,7 @@ export const errorResponse = (
     statusCode: number,
     message: string,
     error: unknown = null
-) => {
+): void => {
     ctx.status = statusCode;
     ctx.body = {
         statusCode,
